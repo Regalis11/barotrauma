@@ -50,6 +50,7 @@ namespace Barotrauma
         public bool DynamicRangeCompressionEnabled { get; set; }
         public bool VoipAttenuationEnabled { get; set; }
         public bool UseDirectionalVoiceChat { get; set; }
+        public bool UseDirectionalVoiceChatForRadio { get; set; }
 
         public IList<string> AudioDeviceNames;
         public IList<string> CaptureDeviceNames;
@@ -1206,6 +1207,7 @@ namespace Barotrauma
                 new XAttribute("dynamicrangecompressionenabled", DynamicRangeCompressionEnabled),
                 new XAttribute("voipattenuationenabled", VoipAttenuationEnabled),
                 new XAttribute("usedirectionalvoicechat", UseDirectionalVoiceChat),
+                new XAttribute("usedirectionalvoicechatforradio", UseDirectionalVoiceChatForRadio),
                 new XAttribute("voicesetting", VoiceSetting),
                 new XAttribute("audiooutputdevice", System.Xml.XmlConvert.EncodeName(AudioOutputDevice ?? "")),
                 new XAttribute("voicecapturedevice", System.Xml.XmlConvert.EncodeName(VoiceCaptureDevice ?? "")),
@@ -1463,6 +1465,7 @@ namespace Barotrauma
                 MuteOnFocusLost = audioSettings.GetAttributeBool("muteonfocuslost", MuteOnFocusLost);
 
                 UseDirectionalVoiceChat = audioSettings.GetAttributeBool("usedirectionalvoicechat", UseDirectionalVoiceChat);
+                UseDirectionalVoiceChatForRadio = audioSettings.GetAttributeBool("usedirectionalvoicechatforradio", UseDirectionalVoiceChatForRadio);
                 VoiceCaptureDevice = System.Xml.XmlConvert.DecodeName(audioSettings.GetAttributeString("voicecapturedevice", VoiceCaptureDevice));
                 AudioOutputDevice = System.Xml.XmlConvert.DecodeName(audioSettings.GetAttributeString("audiooutputdevice", AudioOutputDevice));
                 NoiseGateThreshold = audioSettings.GetAttributeFloat("noisegatethreshold", NoiseGateThreshold);
@@ -1580,6 +1583,7 @@ namespace Barotrauma
             PauseOnFocusLost = true;
             MuteOnFocusLost = false;
             UseDirectionalVoiceChat = true;
+            UseDirectionalVoiceChatForRadio = false;
             VoiceSetting = VoiceMode.Disabled;
             VoiceCaptureDevice = null;
             NoiseGateThreshold = -45;
