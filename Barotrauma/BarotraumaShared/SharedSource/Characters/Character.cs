@@ -69,8 +69,8 @@ namespace Barotrauma
         /// </summary>
         public bool IsRemotelyControlled
         {
-            get 
-            { 
+            get
+            {
                 if (GameMain.NetworkMember == null)
                 {
                     return false;
@@ -211,6 +211,19 @@ namespace Barotrauma
         public bool IsHuman => SpeciesName.Equals(CharacterPrefab.HumanSpeciesName, StringComparison.OrdinalIgnoreCase);
         public bool IsMale => Info != null && Info.HasGenders && Info.Gender == Gender.Male;
         public bool IsFemale => Info != null && Info.HasGenders && Info.Gender == Gender.Female;
+
+        private float reloadCooldown = -1f;
+
+        private Item itemToReload;
+
+        public bool IsReloading
+        {
+            get
+            {
+                if (reloadCooldown >= 0.0f) { return true; }
+                return false;
+            }
+        }
 
         private float attackCoolDown;
 
@@ -376,11 +389,11 @@ namespace Barotrauma
                 if (!AllowInput) { return false; }
                 return true;
             }
-        }
+        }   
 
         public bool CanInteract
         {
-            get { return AllowInput && IsHumanoid && !LockHands && !Removed && !IsIncapacitated; }
+            get { return AllowInput && IsHumanoid && !LockHands && !Removed && !IsIncapacitated && !IsReloading; }
         }
 
         public Vector2 CursorPosition
@@ -601,7 +614,17 @@ namespace Barotrauma
         {
             get;
             set;
-        }       
+        }
+
+        public Item HeadsetSlotItem
+        {
+            get { return this.Inventory.GetItemInLimbSlot(InvSlotType.Headset); }
+        }
+
+        public Item HeadSlotItem
+        {
+            get { return this.Inventory.GetItemInLimbSlot(InvSlotType.Head); }
+        }
 
         /// <summary>
         /// Current speed of the character's collider. Can be used by status effects to check if the character is moving.
@@ -1149,6 +1172,8 @@ namespace Barotrauma
                         return !(dequeuedInput.HasFlag(InputNetFlags.Shoot)) && (prevDequeuedInput.HasFlag(InputNetFlags.Shoot));
                     case InputType.Ragdoll:
                         return !(dequeuedInput.HasFlag(InputNetFlags.Ragdoll)) && (prevDequeuedInput.HasFlag(InputNetFlags.Ragdoll));
+                    case InputType.Reload:
+                        return !(dequeuedInput.HasFlag(InputNetFlags.Reload)) && (prevDequeuedInput.HasFlag(InputNetFlags.Reload));
                     default:
                         return false;
                 }
@@ -1191,6 +1216,8 @@ namespace Barotrauma
                         return dequeuedInput.HasFlag(InputNetFlags.Attack);
                     case InputType.Ragdoll:
                         return dequeuedInput.HasFlag(InputNetFlags.Ragdoll);
+                    case InputType.Reload:
+                        return dequeuedInput.HasFlag(InputNetFlags.Reload);
                 }
                 return false;
             }
@@ -1580,12 +1607,9 @@ namespace Barotrauma
                 }
             }
 #endif
+            if (attackCoolDown > 0.0f) { attackCoolDown -= deltaTime; }
 
-            if (attackCoolDown > 0.0f)
-            {
-                attackCoolDown -= deltaTime;
-            }
-            else if (IsKeyDown(InputType.Attack) && (IsRemotePlayer || Controlled == this || (GameMain.NetworkMember != null && GameMain.NetworkMember.IsClient)))
+            if (attackCoolDown <= 0.0f && !IsReloading && IsKeyDown(InputType.Attack) && (IsRemotePlayer || Controlled == this || (GameMain.NetworkMember != null && GameMain.NetworkMember.IsClient)))
             {
                 Vector2 attackPos = SimPosition + ConvertUnits.ToSimUnits(cursorPosition - Position);
                 List<Body> ignoredBodies = AnimController.Limbs.Select(l => l.body.FarseerBody).ToList();
@@ -1661,7 +1685,24 @@ namespace Barotrauma
                 }
             }
 
-            if (SelectedConstruction == null || !SelectedConstruction.Prefab.DisableItemUsageWhenSelected)
+            if (IsKeyDown(InputType.Reload) && !IsReloading && (IsRemotePlayer || Controlled == this || (GameMain.NetworkMember != null && GameMain.NetworkMember.IsClient)))
+            {
+                if (Character.Controlled.SelectedConstruction?.GetComponent<Ladder>() != null)
+                {
+#if CLIENT
+                    GUI.AddMessage("Not on a ladder", Color.Red);
+#endif
+                }
+                else
+                {
+                    foreach (Item item in HeldItems)
+                    {
+                        StartReload(item);
+                    }
+                }
+            }
+            
+            if (!IsReloading && (SelectedConstruction == null || !SelectedConstruction.Prefab.DisableItemUsageWhenSelected))
             {
                 foreach (Item item in HeldItems)
                 {
@@ -1729,6 +1770,51 @@ namespace Barotrauma
                     key.ResetHit();
                 }
             }
+        }
+
+        private void StartReload(Item item)
+        {
+            float reloadtime = -1f;
+            float reloadtimeMax = -1f; 
+            // Reload time is going to be the longest reload time of any of the components
+            foreach (ItemComponent ic in item.Components)
+            {
+                reloadtime = ic.StartReload(this);
+                if (reloadtime > reloadtimeMax) { reloadtimeMax = reloadtime; }
+            }
+
+            if (reloadtimeMax >= 0)
+            {
+                itemToReload = item;
+                reloadCooldown = reloadtimeMax;
+            }
+            //ic.ApplyStatusEffects(ActionType.OnReload, deltaTime, character, targetLimb);
+            return;
+        }
+
+        // Add to update function: Update timer and check if expired then call FinalizeReload. Check if character state prevents Reload to continue and call AbortReload passed and 
+
+        private void FinalizeReload()
+        {
+            foreach (ItemComponent ic in itemToReload.Components)
+            {
+                ic.FinalizeReload(this);
+            }
+            itemToReload = null;
+            reloadCooldown = -1f;
+            return;
+        }
+
+        private void AbortReload()
+        {
+            // Stop animation and sound prematurely
+            foreach (ItemComponent ic in itemToReload.Components)
+            {
+                ic.AbortReload(this);
+            }
+            itemToReload = null;
+            reloadCooldown = -1f;
+            return;
         }
 
         public bool CanSeeCharacter(Character target)
@@ -2407,6 +2493,23 @@ namespace Barotrauma
 
         public virtual void Update(float deltaTime, Camera cam)
         {
+            if (IsReloading)
+            {
+                if (LockHands || Removed || IsIncapacitated || IsRagdolled || itemToReload.ParentInventory != this.Inventory)
+                {
+                    AbortReload();
+                }
+                else
+                {
+                    reloadCooldown -= deltaTime;
+                    // If reload cooldown expired
+                    if (!IsReloading)
+                    {
+                        FinalizeReload();
+                    }
+                }
+            }
+
             UpdateProjSpecific(deltaTime, cam);
 
             KnockbackCooldownTimer -= deltaTime;
