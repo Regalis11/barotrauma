@@ -481,6 +481,11 @@ namespace Barotrauma
             get { return AllowInput && IsHumanoid && !LockHands && !Removed && !IsIncapacitated; }
         }
 
+        public bool CanInteractMonster
+        {
+            get { return AllowInput && !IsHumanoid && Params.CanEat && !IsIncapacitated; }
+        }
+
         public Vector2 CursorPosition
         {
             get { return cursorPosition; }
@@ -2365,7 +2370,7 @@ namespace Barotrauma
                 {
                     if (findFocusedTimer <= 0.0f || Screen.Selected == GameMain.SubEditorScreen)
                     {
-                        FocusedCharacter = CanInteract ? FindCharacterAtPosition(mouseSimPos) : null;
+                        FocusedCharacter = CanInteract || CanInteractMonster ? FindCharacterAtPosition(mouseSimPos) : null;
                         if (FocusedCharacter != null && !CanSeeCharacter(FocusedCharacter)) { FocusedCharacter = null; }
                         float aimAssist = GameMain.Config.AimAssistAmount * (AnimController.InWater ? 1.5f : 1.0f);
                         if (HeldItems.Any(it => it?.GetComponent<Wire>()?.IsActive ?? false))
@@ -2443,6 +2448,10 @@ namespace Barotrauma
                 DeselectCharacter();
             }
             else if (FocusedCharacter != null && IsKeyHit(InputType.Grab) && FocusedCharacter.CanBeDragged && CanInteract)
+            {
+                SelectCharacter(FocusedCharacter);
+            }
+            else if (FocusedCharacter != null && FocusedCharacter.IsDead && IsKeyHit(InputType.Grab) && FocusedCharacter.CanBeDragged && CanInteractMonster)
             {
                 SelectCharacter(FocusedCharacter);
             }
