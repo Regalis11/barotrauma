@@ -88,6 +88,31 @@ namespace Barotrauma
         }
 
         /// <summary>
+        /// Returns the client that is currently controlling the character
+        /// </summary>
+        public Client GetCharacterClient
+        {
+            get
+            {
+                Client controller = null;
+#if SERVER
+                // Loop through every client in the server
+                foreach (Client c in GameMain.Server.ConnectedClients)
+                {
+                    // If the client's current controlled character is this one, then this character's controller is that client
+                    if (c.Character == this)
+                    {
+                        controller = c;
+                    }
+
+                }
+#endif
+                return controller;
+            }
+
+        }
+
+        /// <summary>
         /// Is the character controlled by another human player (should always be false in single player)
         /// </summary>
         public bool IsRemotePlayer { get; set; }
